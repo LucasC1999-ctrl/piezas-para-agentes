@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import time
 from decimal import Decimal
 from pathlib import Path
@@ -79,24 +80,34 @@ class WalletStore:
         self.home = Path(home) if home else default_home()
         self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db_path = self.home / "wallets.db"
-        self._db: sqlite3.Connection | None = None
+        # Una conexión POR THREAD. SQLite prohíbe compartir una conexión entre
+        # threads, y la API HTTP atiende cada request en uno distinto: con una
+        # sola conexión, el segundo request muere con ProgrammingError.
+        # `threading.local` da a cada thread la suya sin locks ni colas.
+        self._local = threading.local()
 
     @property
     def db(self) -> sqlite3.Connection:
-        if self._db is None:
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
             if not self.db_path.exists():
                 os.close(os.open(self.db_path, os.O_WRONLY | os.O_CREAT, 0o600))
-            self._db = sqlite3.connect(self.db_path, isolation_level=None)
-            self._db.row_factory = sqlite3.Row
-            self._db.execute("PRAGMA journal_mode=WAL")
-            self._db.execute("PRAGMA foreign_keys=ON")
-            self._db.executescript(SCHEMA)
-        return self._db
+            conn = sqlite3.connect(self.db_path, isolation_level=None)
+            conn.row_factory = sqlite3.Row
+            # WAL permite que varios lectores y un escritor convivan, que es
+            # justo el patrón de una API con varios workers.
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.executescript(SCHEMA)
+            self._local.conn = conn
+        return conn
 
     def close(self) -> None:
-        if self._db is not None:
-            self._db.close()
-            self._db = None
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
 
     # --- wallets --------------------------------------------------------------
 
