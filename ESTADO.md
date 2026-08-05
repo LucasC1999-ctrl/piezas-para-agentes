@@ -73,12 +73,28 @@ planillas del estudio**. Hoy tienen un archivo con usuarios y claves fiscales
 (impuestos) y otro con portales de bancos. Eso define la forma:
 
 **Pestañas = secciones.** Se pueden agregar (Impuestos, Bancos, y las que
-vengan). Cada pestaña es una tabla con estas columnas, todas por entrada:
+vengan). Cada pestaña **define sus propias columnas** y se pueden sumar en
+cualquier momento: nada de un esquema fijo.
+
+Columnas de arranque al crear una pestaña (editables, no obligatorias):
 
     cliente | portal | usuario | clave | otros | link
 
-Sólo `clave` se cifra; el resto son metadatos para poder buscar y listar sin
-descifrar (y para que el agente sepa qué hay sin ver el valor).
+**Cada columna declara su tipo, y eso decide qué se cifra:**
+
+| tipo      | se guarda | ¿la ve el agente sin permiso? | ¿aparece en el aviso de Buzz? |
+|-----------|-----------|-------------------------------|-------------------------------|
+| `texto`   | en claro  | sí                            | sí                            |
+| `link`    | en claro  | sí                            | sí                            |
+| `secreto` | cifrado   | **no**                        | **no** (sólo "cambió")        |
+
+Que sea por columna y no por tabla permite dos secretos en la misma fila
+(p.ej. clave fiscal + clave del token) y campos nuevos como "vencimiento" o
+"responsable" sin migrar nada.
+
+Implicancia para el modelo: el `Secret(name, value)` de hoy pasa a ser
+`Seccion(columnas[]) -> Entrada(valores{})`. La maquinaria (cifrado, permisos
+por agente, auditoría, MCP, puente Buzz) NO cambia — cambia la forma del dato.
 
 **La funcionalidad estrella NO es guardar: es avisar.** Cuando alguien cambia
 una clave o agrega un usuario, el aviso sale solo al canal de Buzz — "Lucas
