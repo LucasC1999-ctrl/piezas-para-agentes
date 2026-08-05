@@ -30,6 +30,7 @@ from ..core.resumen import FORMATOS, Marca, Resumen, generar
 from ..core.service import WalletService
 from ..core.store import WalletStore
 from ..drivers.sandbox import SandboxDriver
+from .aprobacion import Tickets, router_aprobacion
 
 
 # --- modelos de entrada -------------------------------------------------------
@@ -87,6 +88,11 @@ def build_app(service: WalletService | None = None, token: str | None = None) ->
         ),
     )
     app.state.token = api_token
+    # Los links de aprobación viven acá: un token de un solo uso por intento.
+    app.state.tickets = Tickets()
+    # Sin auth por header a propósito: el permiso ES el token del link, que
+    # vence en una hora y sirve una sola vez.
+    app.include_router(router_aprobacion(svc, app.state.tickets))
 
     def auth(authorization: Annotated[str | None, Header()] = None) -> None:
         esperado = f"Bearer {app.state.token}"

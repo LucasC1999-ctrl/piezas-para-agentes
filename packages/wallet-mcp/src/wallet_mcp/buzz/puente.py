@@ -50,6 +50,9 @@ class ConfigBuzz:
     # El default seguro es que no funcione, no que funcione para todos.
     aprobadores: tuple[str, ...] = ()
     intervalo: float = 5.0
+    # Base pública de la API de aprobación. Con esto, el mensaje lleva un link
+    # a la página de botones; sin esto, se cae a las reacciones.
+    base_aprobacion: str = ""
 
     @classmethod
     def desde_entorno(cls) -> ConfigBuzz:
@@ -69,6 +72,7 @@ class ConfigBuzz:
             binario=os.environ.get("BUZZ_BINARY", "buzz"),
             aprobadores=aprob,
             intervalo=float(os.environ.get("BUZZ_INTERVALO", "5")),
+            base_aprobacion=os.environ.get("WALLET_APROBACION_URL", ""),
         )
 
 
@@ -128,7 +132,7 @@ class ClienteBuzz:
         return r.get("reactions", []) if isinstance(r, dict) else []
 
 
-def _plantilla(intento: IntentoPago, etiqueta_wallet: str = "") -> str:
+def _plantilla(intento: IntentoPago, etiqueta_wallet: str = "", link: str = "") -> str:
     """El mensaje que ve la persona.
 
     Tiene que poder decidirse SIN abrir otra pantalla: monto, a quién, por qué y
@@ -144,8 +148,13 @@ def _plantilla(intento: IntentoPago, etiqueta_wallet: str = "") -> str:
         f"{f'Concepto: {intento.concepto}' if intento.concepto else ''}\n"
         f"Cuenta: {etiqueta_wallet or intento.wallet_id}\n"
         f"Lo pidió: {intento.creado_por or 'desconocido'}\n\n"
-        f"Reaccioná con ✅ para aprobar o ❌ para rechazar.\n"
-        f"`{intento.id}`"
+        # El link lleva a una página con dos botones (verde/rojo) que muestra
+        # el monto y el destino antes de que se toque nada. Se prefiere al
+        # emoji: un ✅ puede ser un pulgar arriba de "buenísimo", un botón que
+        # dice APROBAR Y TRANSFERIR no se aprieta sin querer.
+        + (f"**[Abrir para decidir]({link})**\n\n" if link else
+           "Reaccioná con ✅ para aprobar o ❌ para rechazar.\n")
+        + f"`{intento.id}`"
     )
 
 
@@ -153,10 +162,11 @@ class PuenteBuzz:
     """Publica intentos en Buzz y aplica las reacciones autorizadas."""
 
     def __init__(self, service: WalletService, cfg: ConfigBuzz,
-                 cliente: ClienteBuzz | None = None):
+                 cliente: ClienteBuzz | None = None, tickets=None):
         self.svc = service
         self.cfg = cfg
         self.buzz = cliente or ClienteBuzz(cfg)
+        self.tickets = tickets
         # intento_id -> event_id del mensaje publicado
         self._publicados: dict[str, str] = {}
         self._ya_avisados: set[str] = set()
@@ -171,7 +181,10 @@ class PuenteBuzz:
             etiqueta = self.svc.obtener_wallet(intento.wallet_id).etiqueta
         except WalletError:
             pass
-        event_id = self.buzz.enviar(_plantilla(intento, etiqueta))
+        link = ""
+        if self.tickets is not None and self.cfg.base_aprobacion:
+            link = f"{self.cfg.base_aprobacion.rstrip('/')}/aprobar/{self.tickets.emitir(intento.id)}"
+        event_id = self.buzz.enviar(_plantilla(intento, etiqueta, link))
         if event_id:
             self._publicados[intento.id] = event_id
         return event_id
