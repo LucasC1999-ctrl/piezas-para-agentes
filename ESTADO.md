@@ -116,9 +116,19 @@ que sincronizar ni bases SQLite viajando por OneDrive, que se corrompen.
 - KeePassXC como backend. Se evaluó y se descartó: es para una persona con su
   base, no para un equipo que necesita enterarse de los cambios.
 
-**Pendiente de definir:** ¿todos ven todas las credenciales, o hace falta
-permiso por persona además de por agente? Sin eso resuelto, asumir que todos
-ven todo (es lo que pasa hoy con las planillas).
+**DEFINIDO (2026-08-05): todas las PERSONAS del estudio ven todo y pueden
+agregar y editar todo.** Sin ACL por persona — es como funcionan hoy las
+planillas y agregarla sería resolver un problema que no existe.
+
+Consecuencia que hay que respetar al implementar: si nadie está bloqueado, el
+control no es *impedir* sino *enterarse*. Entonces la auditoría y el aviso a
+Buzz no son una comodidad, son lo que sostiene la confianza: **toda edición
+lleva nombre y avisa sola**. Si se implementa la web sin identificar quién
+edita, el sistema pierde su única garantía.
+
+**Los AGENTES sí mantienen permiso uno por uno.** Que todo el estudio vea
+todas las credenciales no implica que un agente deba tenerlas: a un agente le
+pueden cambiar el prompt, a una persona no.
 
 ## SIGUIENTE PASO
 
