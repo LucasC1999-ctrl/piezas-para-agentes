@@ -13,8 +13,10 @@ inyectar demoras y errores para que se pueda testear el camino triste.
 from __future__ import annotations
 
 import asyncio
+import json
 import random
 import time
+from pathlib import Path
 from decimal import Decimal
 
 from ..core.errors import InsufficientFunds, ProviderError, ValidationError
@@ -33,7 +35,7 @@ from .base import Capacidades
 
 
 class SandboxDriver:
-    """Proveedor simulado, todo en memoria.
+    """Proveedor simulado. En memoria, o en un archivo si se le da `estado_en`.
 
     `saldo_inicial` arranca en 100.000 para que se pueda transferir apenas se
     crea la wallet: un sandbox que arranca en cero obliga a inventar un ingreso
@@ -49,7 +51,19 @@ class SandboxDriver:
         demora: float = 0.0,
         tasa_de_error: float = 0.0,
         semilla: int | None = None,
+        estado_en: Path | str | None = None,
     ):
+        """`estado_en` es un archivo donde persistir. Sin él, todo en memoria.
+
+        Existe porque un proveedor de verdad RECUERDA entre llamadas, y cada
+        comando de la CLI es un proceso nuevo. Un sandbox puramente en memoria
+        hace que la wallet exista en la base pero su saldo nazca en cero en
+        cada invocación — que fue exactamente el bug que apareció la primera
+        vez que se probó el ciclo completo desde la terminal.
+
+        Los tests lo dejan en None y usan una sola instancia, así que siguen
+        siendo rápidos y aislados.
+        """
         self.saldo_inicial = saldo_inicial
         self.demora = demora
         self.tasa_de_error = tasa_de_error
@@ -57,6 +71,52 @@ class SandboxDriver:
         self._saldos: dict[str, Decimal] = {}
         self._movs: dict[str, list[Movimiento]] = {}
         self._idem: dict[str, str] = {}
+        self._estado_en = Path(estado_en) if estado_en else None
+        self._cargar()
+
+    # --- persistencia opcional ------------------------------------------------
+
+    def _cargar(self) -> None:
+        if not self._estado_en or not self._estado_en.exists():
+            return
+        try:
+            d = json.loads(self._estado_en.read_text())
+        except (json.JSONDecodeError, OSError):
+            return  # estado corrupto: se arranca limpio, es un sandbox
+        self._saldos = {k: Decimal(v) for k, v in d.get("saldos", {}).items()}
+        self._idem = dict(d.get("idem", {}))
+        self._movs = {
+            wid: [
+                Movimiento(
+                    id=m["id"], wallet_id=wid, tipo=TipoMovimiento(m["tipo"]),
+                    monto=Decimal(m["monto"]), moneda=Moneda(m["moneda"]),
+                    fecha=m["fecha"], descripcion=m.get("descripcion", ""),
+                    contraparte=m.get("contraparte", ""),
+                    contraparte_cvu=m.get("contraparte_cvu", ""),
+                    referencia=m.get("referencia", ""),
+                    saldo_posterior=(Decimal(m["saldo_posterior"])
+                                     if m.get("saldo_posterior") else None),
+                )
+                for m in movs
+            ]
+            for wid, movs in d.get("movs", {}).items()
+        }
+
+    def _guardar(self) -> None:
+        if not self._estado_en:
+            return
+        self._estado_en.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "saldos": {k: str(v) for k, v in self._saldos.items()},
+            "idem": self._idem,
+            "movs": {wid: [m.to_dict() | {"id": m.id} for m in movs]
+                     for wid, movs in self._movs.items()},
+        }
+        # Escritura atómica: si el proceso muere a mitad, el archivo viejo
+        # sigue entero en vez de quedar truncado.
+        tmp = self._estado_en.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload))
+        tmp.replace(self._estado_en)
 
     def capacidades(self) -> Capacidades:
         return Capacidades(
@@ -90,6 +150,7 @@ class SandboxDriver:
                 descripcion="Saldo inicial de prueba", contraparte="sandbox",
                 saldo_posterior=self.saldo_inicial,
             ))
+        self._guardar()
         return Wallet(
             id=wid, titular=titular, driver=self.nombre, alias_externo=wid,
             cvu=cvu, alias=f"sandbox.{wid[-6:]}", estado=EstadoWallet.ACTIVA,
@@ -148,6 +209,7 @@ class SandboxDriver:
         ))
         if idempotency_key:
             self._idem[idempotency_key] = comprobante
+        self._guardar()
         return comprobante
 
     # --- ayudas de test, no son parte del contrato ----------------------------
@@ -161,3 +223,4 @@ class SandboxDriver:
             descripcion=descripcion, contraparte="acreditación simulada",
             saldo_posterior=self._saldos[wallet.id],
         ))
+        self._guardar()

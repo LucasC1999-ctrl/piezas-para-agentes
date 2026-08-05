@@ -19,6 +19,7 @@ dev = ["pytest>=8.3", "pytest-asyncio>=0.25", "ruff>=0.9"]
 
 [project.scripts]
 wallet-mcp = "wallet_mcp.mcp.server:main"
+wallet-admin = "wallet_mcp.mcp.admin:main"
 wallet-api = "wallet_mcp.api.http:main"
 
 [build-system]
