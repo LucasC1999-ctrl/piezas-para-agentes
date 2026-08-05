@@ -4,12 +4,12 @@
 
 ## Dónde estamos
 
-Dos piezas funcionando de punta a punta, con 53 tests en verde.
+Dos piezas funcionando de punta a punta, con 67 tests en verde.
 
 | pieza | estado | qué falta |
 |---|---|---|
 | `vault-mcp` | **funciona** — 21 tests | API HTTP (opcional) |
-| `wallet-mcp` | **funciona con sandbox** — 32 tests | drivers reales |
+| `wallet-mcp` | **funciona con sandbox** — 46 tests | drivers reales |
 
 ## Decisiones tomadas (no volver a discutirlas sin motivo)
 
@@ -48,6 +48,24 @@ WALLET_API_TOKEN=xxx .venv/bin/wallet-api   # http://127.0.0.1:8479/docs
 ./scripts/conectar-a-buzz.sh Claude
 ```
 
+## Puente con Buzz — LISTO
+
+El intento pendiente se publica como mensaje en un canal y se aprueba con una
+reacción: ✅ ejecuta, ❌ rechaza. El comprobante vuelve como respuesta en el
+mismo hilo. Verificado contra el relay real, no sólo con mocks.
+
+**La seguridad está en `BUZZ_APROBADORES`, no en el canal.** Un canal privado no
+alcanza: cualquiera adentro podría reaccionar. Sólo los pubkeys de esa lista
+aprueban; el resto se ignora. Lista vacía = nadie aprueba (default seguro).
+Si hay ✅ y ❌ a la vez, gana el ❌.
+
+```bash
+export BUZZ_CHANNEL=<uuid> BUZZ_PRIVATE_KEY=<nsec> \
+       BUZZ_APROBADORES=<pubkey-hex>,<otra>
+wallet-buzz              # bucle
+wallet-buzz --una-vez    # una ronda
+```
+
 ## SIGUIENTE PASO
 
 **Driver de Mercado Pago, parcial y honesto.**
@@ -72,10 +90,9 @@ que existe `Capacidades`. Falta implementar las llamadas HTTP.
 1. `wallet_cobrar` (generar link de pago / QR) — es lo que MP **sí** permite y
    lo que haría útil el driver desde el día uno.
 2. API HTTP del vault, para administrarlo desde una pantalla.
-3. Notificación de pendientes hacia Buzz: hoy el agente propone y hay que
-   correr `wallet-admin pendientes` a mano. Lo natural es que el intento
-   aparezca como mensaje en un canal y se apruebe desde ahí.
-4. Driver BIND, cuando haya contrato.
+3. Driver BIND, cuando haya contrato.
+4. El puente hoy pollea cada 5s. Si el volumen crece, conviene suscribirse a
+   los eventos del relay en vez de preguntar.
 
 ## Aprendido (no repetir)
 
