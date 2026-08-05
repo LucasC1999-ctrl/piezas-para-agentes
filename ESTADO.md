@@ -66,6 +66,44 @@ wallet-buzz              # bucle
 wallet-buzz --una-vez    # una ronda
 ```
 
+## REQUISITO NUEVO del vault (2026-08-05) — leer antes de tocar el modelo
+
+El vault NO es un gestor de contraseñas personal: es **el reemplazo de las dos
+planillas del estudio**. Hoy tienen un archivo con usuarios y claves fiscales
+(impuestos) y otro con portales de bancos. Eso define la forma:
+
+**Pestañas = secciones.** Se pueden agregar (Impuestos, Bancos, y las que
+vengan). Cada pestaña es una tabla con estas columnas, todas por entrada:
+
+    cliente | portal | usuario | clave | otros | link
+
+Sólo `clave` se cifra; el resto son metadatos para poder buscar y listar sin
+descifrar (y para que el agente sepa qué hay sin ver el valor).
+
+**La funcionalidad estrella NO es guardar: es avisar.** Cuando alguien cambia
+una clave o agrega un usuario, el aviso sale solo al canal de Buzz — "Lucas
+actualizó la clave de ARCA de <cliente>". **Nunca el valor, sólo que cambió.**
+Ese es el dolor real del estudio: alguien rota una clave y el resto se entera
+el jueves cuando no puede entrar. Ningún gestor de contraseñas lo resuelve.
+
+**Cómo se usa:** un acceso directo en el escritorio (`.desktop`) que abre la
+web local. Nada que instalar, y se ve igual desde el teléfono.
+
+**Dónde corre:** en UN solo lugar (el servidor del estudio, donde ya vive el
+relay de Buzz). Todos entran por web a la misma instancia — así no hay copias
+que sincronizar ni bases SQLite viajando por OneDrive, que se corrompen.
+
+**Lo que NO hay que construir:**
+- Autoguardado tipo Google / autocompletado de formularios. Eso necesita una
+  extensión de navegador y es otro producto. Lucas sigue usando Chrome para
+  entrar a las páginas; conviven sin pisarse.
+- KeePassXC como backend. Se evaluó y se descartó: es para una persona con su
+  base, no para un equipo que necesita enterarse de los cambios.
+
+**Pendiente de definir:** ¿todos ven todas las credenciales, o hace falta
+permiso por persona además de por agente? Sin eso resuelto, asumir que todos
+ven todo (es lo que pasa hoy con las planillas).
+
 ## SIGUIENTE PASO
 
 **Driver de Mercado Pago, parcial y honesto.**
