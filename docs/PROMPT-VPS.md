@@ -60,36 +60,115 @@ no con el paquete de la distro — el de Debian suele venir sin `compose` v2.
 **Si los puertos 80 o 443 están ocupados, pará y avisame.** Probablemente haya
 otro servicio y necesitamos decidir qué hacer, no pisarlo.
 
-## Paso 2 — El relay de Buzz
+## Paso 2 — Generar la identidad del relay (ANTES de levantar nada)
+
+Este paso va primero por un deadlock real: con `BUZZ_REQUIRE_RELAY_MEMBERSHIP=true`
+el relay valida `RELAY_OWNER_PUBKEY` **antes de arrancar** y aborta si falta. Pero
+si generaras la clave con `docker exec` necesitarías el relay ya corriendo. Cada
+paso esperaría al otro.
+
+Se rompe generando la clave sin el relay:
 
 ```bash
 git clone https://github.com/block/buzz.git ~/buzz-src
 cd ~/buzz-src/deploy/compose
-cp .env.example .env   # si no existe, mirá qué variables pide compose.yml
+
+# --entrypoint es obligatorio: el ENTRYPOINT de la imagen es buzz-relay, así que
+# sin sobrescribirlo los argumentos se los come el relay e intenta arrancar.
+umask 077
+docker run --rm --entrypoint buzz-admin ghcr.io/block/buzz:main generate-key \
+  > ~/buzz-admin-identidad.txt
+chmod 600 ~/buzz-admin-identidad.txt
 ```
 
-Editá `.env` con esto, y prestá atención a la primera variable porque es la
-que más problemas da:
+Ese archivo tiene la clave pública y la privada.
 
+- **NO pegues la privada en el chat.** Ya está en el archivo con permisos 600.
+- Decime sólo la **pública**, que no es secreta.
+
+Hace falta además una clave para el relay mismo (distinta de la del dueño):
+
+```bash
+docker run --rm --entrypoint buzz-admin ghcr.io/block/buzz:main generate-key \
+  > ~/buzz-relay-identidad.txt
+chmod 600 ~/buzz-relay-identidad.txt
 ```
-# CRÍTICO: el relay deriva de acá el "host" de su comunidad, y después SÓLO
-# responde a pedidos que lleguen con ese Host exacto, puerto incluido. Si esto
-# no coincide con el dominio por el que se entra, el WebSocket devuelve
-# "404 no community is configured for this host" y ningún agente se conecta,
-# aunque el HTTP normal responda 200 y parezca que todo anda.
-# Va el dominio público con wss://, sin puerto (443 es implícito).
-BUZZ_RELAY_URL=wss://buzz.ovdianlabs.com
 
-# Generá cada uno con: openssl rand -hex 32
-BUZZ_S3_ACCESS_KEY=<generar>
-BUZZ_S3_SECRET_KEY=<generar>
-BUZZ_S3_BUCKET=buzz-media
+## Paso 3 — El `.env`
 
-BUZZ_AUTO_MIGRATE=true
+**NO hagas `cp .env.example .env`.** Escribí el archivo de cero.
+
+Motivo: el ejemplo trae valores `CHANGE_ME_...`, y el `${VAR:?}` de Compose sólo
+falla si la variable está vacía o no existe — con `CHANGE_ME` **no se dispara**.
+Resultado: el stack levanta feliz con `CHANGE_ME_RANDOM_PASSWORD` como contraseña
+de Postgres. Falla en silencio, que es el modo peligroso.
+
+```bash
+cat > .env <<'EOF'
+# Pineá el digest en vez de :main, así lo que corre es lo que auditaste.
+BUZZ_IMAGE=ghcr.io/block/buzz:main
+
+# ── LA VARIABLE MÁS IMPORTANTE ──────────────────────────────────────────────
+# Se llama RELAY_URL, NO BUZZ_RELAY_URL.
+#   crates/buzz-relay/src/config.rs:535 → std::env::var("RELAY_URL")
+# `BUZZ_RELAY_URL` existe en el repo pero la leen buzz-dev-mcp y los test
+# clients, nunca el relay. Peor: el mensaje de error del propio relay
+# (main.rs:265) nombra BUZZ_RELAY_URL, que no es la que lee.
+#
+# Y como es un unwrap_or_else, escribirla mal NO hace ruido: cae al default
+# ws://localhost:3000, la comunidad se crea con ese host, el HTTP responde 200
+# normal, y sólo el WebSocket devuelve 404. Es la falla más difícil de ver de
+# toda esta instalación.
+RELAY_URL=wss://buzz.ovdianlabs.com
+BUZZ_DOMAIN=buzz.ovdianlabs.com
+
+BUZZ_MEDIA_BASE_URL=https://buzz.ovdianlabs.com
+BUZZ_MEDIA_SERVER_DOMAIN=buzz.ovdianlabs.com
+BUZZ_CORS_ORIGINS=https://buzz.ovdianlabs.com
+
+BUZZ_REQUIRE_AUTH_TOKEN=true
 BUZZ_REQUIRE_RELAY_MEMBERSHIP=true
+BUZZ_ALLOW_NIP_OA_AUTH=true
+BUZZ_AUTO_MIGRATE=true
+BUZZ_GIT_CONFORMANCE_PROBE=true
+RUST_LOG=info
+
+# Del Paso 2. La pública del dueño, y la PRIVADA del relay.
+# La privada del relay tiene que ser estable: con una efímera, cada reinicio
+# invalida las firmas NIP-43 anteriores.
+RELAY_OWNER_PUBKEY=<pubkey del archivo buzz-admin-identidad.txt>
+BUZZ_RELAY_PRIVATE_KEY=<privada del archivo buzz-relay-identidad.txt>
+BUZZ_GIT_HOOK_HMAC_SECRET=<openssl rand -hex 32>
+
+POSTGRES_DB=buzz
+POSTGRES_USER=buzz
+POSTGRES_PASSWORD=<openssl rand -hex 32>
+REDIS_PASSWORD=<openssl rand -hex 32>
+
+BUZZ_S3_ACCESS_KEY=<openssl rand -hex 32>
+BUZZ_S3_SECRET_KEY=<openssl rand -hex 32>
+BUZZ_S3_BUCKET=buzz-media
+BUZZ_S3_ADDRESSING_STYLE=path
+
+BUZZ_HTTP_PORT=3000
+CADDY_HTTP_PORT=80
+CADDY_HTTPS_PORT=443
+EOF
+chmod 600 .env
 ```
 
-Levantalo **con** el compose de Caddy, que resuelve el TLS solo:
+Verificá que no haya quedado ningún placeholder antes de seguir:
+
+```bash
+grep -nE "CHANGE_ME|<.*>" .env && echo "FALTAN VALORES" || echo "env completo"
+```
+
+Las cinco que el prompt viejo omitía y son obligatorias: `POSTGRES_PASSWORD`,
+`REDIS_PASSWORD` (Compose no renderiza sin ellas), `BUZZ_DOMAIN` (sin esto Caddy
+no tiene nombre de sitio y no hay TLS), y `RELAY_OWNER_PUBKEY` +
+`BUZZ_RELAY_PRIVATE_KEY` (el relay aborta al arrancar).
+
+## Paso 3b — Levantar
 
 ```bash
 docker compose -f compose.yml -f compose.caddy.yml up -d
@@ -97,15 +176,16 @@ docker compose ps
 docker compose logs relay | grep -i "community ensured"
 ```
 
-Esa última línea es la que confirma que quedó bien. Tiene que decir
-`host: buzz.ovdianlabs.com`. **Si dice `localhost:3000` u otra cosa, `BUZZ_RELAY_URL`
-está mal: corregilo, `docker compose down` y volvé a levantar.** No sigas con
-un host equivocado, porque todo lo demás va a fallar de formas confusas.
+Esa última línea es la que confirma todo. Tiene que decir
+`host: buzz.ovdianlabs.com`. **Si dice `localhost:3000`, escribiste
+`BUZZ_RELAY_URL` en vez de `RELAY_URL`** — corregilo, `docker compose down` y
+volvé a levantar.
 
 Verificá el TLS y el WebSocket desde afuera:
 
 ```bash
 curl -sI https://buzz.ovdianlabs.com | head -3
+
 # --http1.1 NO es opcional: sin eso curl negocia HTTP/2, donde el upgrade con
 # "Connection: Upgrade" no existe, y devuelve 200 — un falso OK que hace creer
 # que el WebSocket anda cuando no se probó nada.
@@ -115,42 +195,13 @@ curl -s -o /dev/null -w "%{http_code}\n" --http1.1 \
   https://buzz.ovdianlabs.com/
 ```
 
-El segundo tiene que dar **101** (Switching Protocols). Si da 404, es el
-problema del host que expliqué arriba. Si da 502, el relay no levantó.
+El segundo tiene que dar **101**. Si da 404, es el problema de `RELAY_URL`. Si da
+502, el relay no levantó.
 
-## Paso 3 — La identidad de administración del estudio
-
-En Buzz no hay cuentas con mail ni login con Google: la identidad es un par de
-claves Nostr. Este relay necesita una identidad de admin **propia del estudio**,
-no la de una notebook personal — si el admin fuera la identidad de una máquina,
-el día que esa máquina se rompe se pierde el control del relay.
-
-Generala en el VPS:
-
-```bash
-docker exec buzz-prod-relay-1 buzz-admin generate-key
-```
-
-Eso imprime una clave pública y una privada.
-
-**Con la privada, cuidado:**
-
-- **NO la pegues en este chat.** Guardala en `~/buzz-admin-identidad.txt` con
-  permisos `600` (`umask 077` antes de escribir el archivo).
-- Decime sólo la **pública**, que no es secreta.
-
-Después dale el rol de admin en el relay:
-
-```bash
-docker exec buzz-prod-relay-1 buzz-admin add-member \
-  --pubkey <LA_PUBLICA_QUE_GENERASTE> --role admin
-docker exec buzz-prod-relay-1 buzz-admin list-members
-```
-
-Cuando termines, avisame que la clave privada quedó en ese archivo: la voy a
-buscar por SSH para importarla en mi Buzz de escritorio y guardarla donde
-corresponde. **Esa clave es el control del relay: si se pierde, se pierde la
-administración; si se filtra, cualquiera es admin.**
+Nota sobre el dueño: **no corras `buzz-admin add-member --role admin`**. El dueño
+se define por `RELAY_OWNER_PUBKEY` en el `.env`, que es más fuerte que admin —
+agregarlo como admin sería degradarlo. `buzz-admin` de hecho rechaza el rol owner
+a propósito.
 
 ## Paso 4 — Las piezas
 
