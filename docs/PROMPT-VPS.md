@@ -12,8 +12,8 @@ hecho sin comprobarlo.
 
 ## Datos de esta instalación
 
-- Dominio: `buzz.ejemplo.com`          ← COMPLETAR (tiene que apuntar ya al VPS)
-- Email para Let's Encrypt: `vos@ejemplo.com`   ← COMPLETAR
+- Dominio: `buzz.ovdianlabs.com`
+- Email para Let's Encrypt: `TU_MAIL@ovdianlabs.com`   ← COMPLETAR
 - Mi pubkey de Buzz (hex, 64 chars): `PEGAR_ACA`  ← COMPLETAR
 - Repo de las piezas: `https://github.com/LucasC1999-ctrl/piezas-para-agentes`
 
@@ -60,7 +60,7 @@ que más problemas da:
 # "404 no community is configured for this host" y ningún agente se conecta,
 # aunque el HTTP normal responda 200 y parezca que todo anda.
 # Va el dominio público con wss://, sin puerto (443 es implícito).
-BUZZ_RELAY_URL=wss://buzz.ejemplo.com
+BUZZ_RELAY_URL=wss://buzz.ovdianlabs.com
 
 # Generá cada uno con: openssl rand -hex 32
 BUZZ_S3_ACCESS_KEY=<generar>
@@ -80,18 +80,18 @@ docker compose logs relay | grep -i "community ensured"
 ```
 
 Esa última línea es la que confirma que quedó bien. Tiene que decir
-`host: buzz.ejemplo.com`. **Si dice `localhost:3000` u otra cosa, `BUZZ_RELAY_URL`
+`host: buzz.ovdianlabs.com`. **Si dice `localhost:3000` u otra cosa, `BUZZ_RELAY_URL`
 está mal: corregilo, `docker compose down` y volvé a levantar.** No sigas con
 un host equivocado, porque todo lo demás va a fallar de formas confusas.
 
 Verificá el TLS y el WebSocket desde afuera:
 
 ```bash
-curl -sI https://buzz.ejemplo.com | head -3
+curl -sI https://buzz.ovdianlabs.com | head -3
 curl -s -o /dev/null -w "%{http_code}\n" \
   -H "Connection: Upgrade" -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
-  https://buzz.ejemplo.com/
+  https://buzz.ovdianlabs.com/
 ```
 
 El segundo tiene que dar **101** (Switching Protocols). Si da 404, es el
