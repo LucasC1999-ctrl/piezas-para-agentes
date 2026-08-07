@@ -13,11 +13,12 @@ hecho sin comprobarlo.
 ## Datos de esta instalación
 
 - Dominio: `buzz.ovdianlabs.com`
-- Email para Let's Encrypt: `TU_MAIL@ovdianlabs.com`   ← COMPLETAR
-- Mi pubkey de Buzz (hex, 64 chars): `PEGAR_ACA`  ← COMPLETAR
+- Email para Let's Encrypt: `administracion@ovdianlabs.com`
+- Mi pubkey de Buzz (hex): `4a0a74b201318878b9aaa08acb7f3767ff8867610f7b053ec699f1ee0ac218d1`
 - Repo de las piezas: `https://github.com/LucasC1999-ctrl/piezas-para-agentes`
 
-Si alguno está sin completar, **frená y pedímelo** en vez de inventar un valor.
+El DNS ya está creado y propagado (verificado el 2026-08-06): `buzz.ovdianlabs.com`
+resuelve a `178.105.175.106` en los resolvedores públicos.
 
 ## Qué tiene que quedar andando
 
@@ -119,7 +120,7 @@ Con `BUZZ_REQUIRE_RELAY_MEMBERSHIP=true`, sin esto no entro ni yo:
 
 ```bash
 docker exec buzz-prod-relay-1 buzz-admin add-member \
-  --pubkey <MI_PUBKEY> --role admin
+  --pubkey 4a0a74b201318878b9aaa08acb7f3767ff8867610f7b053ec699f1ee0ac218d1 --role admin
 docker exec buzz-prod-relay-1 buzz-admin list-members
 ```
 
