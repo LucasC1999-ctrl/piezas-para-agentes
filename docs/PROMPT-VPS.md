@@ -25,6 +25,22 @@ Si alguno está sin completar, **frená y pedímelo** en vez de inventar un valo
 2. **Las tres piezas** (`vault-mcp`, `wallet-mcp`, `planilla-watch`), instaladas
    y con sus tests en verde.
 
+## Paso 0 — Confirmar que el DNS ya apunta acá
+
+Nada de lo que sigue funciona sin esto: Caddy le pide el certificado a Let's
+Encrypt, que valida resolviendo el dominio. Si el DNS no está, falla y el
+relay no levanta con TLS.
+
+```bash
+dig +short A buzz.ovdianlabs.com
+curl -s ifconfig.me; echo
+```
+
+Las dos salidas tienen que ser **178.105.175.106**. Si `dig` no devuelve nada
+o devuelve otra IP, **frená y avisame**: el registro DNS se crea en Squarespace
+(Settings → Domains → ovdianlabs.com → DNS Settings) con tipo `A`, host `buzz`,
+apuntando a esa IP. Tarda unos minutos en propagar.
+
 ## Paso 1 — Reconocer el terreno
 
 Antes de instalar nada, decime qué encontrás:
