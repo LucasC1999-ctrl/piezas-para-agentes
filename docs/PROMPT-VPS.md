@@ -14,7 +14,8 @@ hecho sin comprobarlo.
 
 - Dominio: `buzz.ovdianlabs.com`
 - Email para Let's Encrypt: `administracion@ovdianlabs.com`
-- Mi pubkey de Buzz (hex): `4a0a74b201318878b9aaa08acb7f3767ff8867610f7b053ec699f1ee0ac218d1`
+- Identidad de admin: **la vas a generar vos en el Paso 3** (no reutilizamos la de mi
+  notebook: el relay del estudio tiene que tener una identidad propia)
 - Repo de las piezas: `https://github.com/LucasC1999-ctrl/piezas-para-agentes`
 
 El DNS ya está creado y propagado (verificado el 2026-08-06): `buzz.ovdianlabs.com`
@@ -114,15 +115,39 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 El segundo tiene que dar **101** (Switching Protocols). Si da 404, es el
 problema del host que expliqué arriba. Si da 502, el relay no levantó.
 
-## Paso 3 — Darme acceso
+## Paso 3 — La identidad de administración del estudio
 
-Con `BUZZ_REQUIRE_RELAY_MEMBERSHIP=true`, sin esto no entro ni yo:
+En Buzz no hay cuentas con mail ni login con Google: la identidad es un par de
+claves Nostr. Este relay necesita una identidad de admin **propia del estudio**,
+no la de una notebook personal — si el admin fuera la identidad de una máquina,
+el día que esa máquina se rompe se pierde el control del relay.
+
+Generala en el VPS:
+
+```bash
+docker exec buzz-prod-relay-1 buzz-admin generate-key
+```
+
+Eso imprime una clave pública y una privada.
+
+**Con la privada, cuidado:**
+
+- **NO la pegues en este chat.** Guardala en `~/buzz-admin-identidad.txt` con
+  permisos `600` (`umask 077` antes de escribir el archivo).
+- Decime sólo la **pública**, que no es secreta.
+
+Después dale el rol de admin en el relay:
 
 ```bash
 docker exec buzz-prod-relay-1 buzz-admin add-member \
-  --pubkey 4a0a74b201318878b9aaa08acb7f3767ff8867610f7b053ec699f1ee0ac218d1 --role admin
+  --pubkey <LA_PUBLICA_QUE_GENERASTE> --role admin
 docker exec buzz-prod-relay-1 buzz-admin list-members
 ```
+
+Cuando termines, avisame que la clave privada quedó en ese archivo: la voy a
+buscar por SSH para importarla en mi Buzz de escritorio y guardarla donde
+corresponde. **Esa clave es el control del relay: si se pierde, se pierde la
+administración; si se filtra, cualquiera es admin.**
 
 ## Paso 4 — Las piezas
 
