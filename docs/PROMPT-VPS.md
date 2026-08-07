@@ -106,7 +106,10 @@ Verificá el TLS y el WebSocket desde afuera:
 
 ```bash
 curl -sI https://buzz.ovdianlabs.com | head -3
-curl -s -o /dev/null -w "%{http_code}\n" \
+# --http1.1 NO es opcional: sin eso curl negocia HTTP/2, donde el upgrade con
+# "Connection: Upgrade" no existe, y devuelve 200 — un falso OK que hace creer
+# que el WebSocket anda cuando no se probó nada.
+curl -s -o /dev/null -w "%{http_code}\n" --http1.1 \
   -H "Connection: Upgrade" -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
   https://buzz.ovdianlabs.com/
